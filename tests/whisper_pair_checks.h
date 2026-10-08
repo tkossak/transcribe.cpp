@@ -36,15 +36,20 @@ static void check_whisper_pair_results(transcribe_session * session,
     CHECK(std::strcmp(transcribe_batch_detected_language(session, 0), "en") == 0);
     CHECK(std::strcmp(transcribe_batch_detected_language(session, 1), "de") == 0);
 
-    // Explicitly select an existing serial batch fallback (ALL_SEGMENTS).
+    // A one-utterance batch always takes Whisper's serial fallback, on CPU
+    // and GPU. Use a valid long-form prompt policy, then verify each slot
+    // succeeded before inspecting its independently detected source.
     transcribe_whisper_run_ext w;
     transcribe_whisper_run_ext_init(&w);
     w.prompt_condition = TRANSCRIBE_WHISPER_PROMPT_ALL_SEGMENTS;
-    w.condition_on_prev_tokens = false;
+    w.condition_on_prev_tokens = true;
     p.family = &w.ext;
-    CHECK(transcribe_run_batch(session, inputs, lengths, 2, &p) == TRANSCRIBE_OK);
-    CHECK(std::strcmp(transcribe_batch_detected_language(session, 0), "en") == 0);
-    CHECK(std::strcmp(transcribe_batch_detected_language(session, 1), "de") == 0);
+    for (int i = 0; i < 2; ++i) {
+        CHECK(transcribe_run_batch(session, inputs + i, lengths + i, 1, &p) == TRANSCRIBE_OK);
+        CHECK(transcribe_batch_n_results(session) == 1);
+        CHECK(transcribe_batch_status(session, 0) == TRANSCRIBE_OK);
+        CHECK(std::strcmp(transcribe_batch_detected_language(session, 0), i == 0 ? "en" : "de") == 0);
+    }
     p.family = nullptr;
 
     // More than one encoder window: the later German speech cannot change

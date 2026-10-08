@@ -143,10 +143,16 @@ fn assert_incompatible_pair_is_rejected(session: &mut Session) {
     let options = pair(["pl", "en"]);
     assert!(matches!(session.run(&audio, &options), Err(Error::Unsupported(_))));
     assert!(matches!(session.run_batch(&[&audio], &options), Err(Error::Unsupported(_))));
-    assert!(matches!(
-        session.stream(&options, &StreamOptions::default()),
-        Err(Error::Unsupported(_))
-    ));
+    // Streaming availability is checked before run options by the native
+    // dispatcher. Preserve its existing distinct "no streaming path" error;
+    // a stream-capable non-Whisper model must reject the restriction itself.
+    let supports_streaming = session.model().capabilities().supports_streaming;
+    match session.stream(&options, &StreamOptions::default()) {
+        Err(Error::Unsupported(_)) if supports_streaming => {}
+        Err(Error::NotImplemented(_)) if !supports_streaming => {}
+        Err(error) => panic!("unexpected streaming rejection: {error:?}; supports_streaming={supports_streaming}"),
+        Ok(_) => panic!("an incompatible recognition pair must not begin streaming"),
+    }
 }
 
 #[test]
