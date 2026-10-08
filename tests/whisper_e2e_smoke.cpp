@@ -51,6 +51,8 @@ bool file_exists(const std::string & path) {
     struct stat st{};
     return ::stat(path.c_str(), &st) == 0;
 }
+#include "whisper_pair_checks.h"
+
 
 }  // namespace
 
@@ -93,6 +95,7 @@ int main() {
     if (caps != nullptr) {
         CHECK_EQ_INT(caps->native_sample_rate, 16000);
         CHECK(caps->supports_language_detect);
+        CHECK(caps->supports_language_candidates);
         CHECK(caps->supports_translate);
         CHECK_EQ_INT(caps->max_timestamp_kind, TRANSCRIBE_TIMESTAMPS_SEGMENT);
         CHECK(caps->n_languages > 0);
@@ -115,6 +118,15 @@ int main() {
         std::fprintf(stderr, "FAIL context init: %s\n", transcribe_status_string(st));
         transcribe_model_free(model);
         return EXIT_FAILURE;
+    }
+
+    {
+        std::vector<float> german;
+        CHECK(transcribe_cli::load_wav_mono_16k(
+            std::string(TRANSCRIBE_TEST_SAMPLES_DIR) + "/german.wav", german, wav_err));
+        if (!german.empty()) {
+            check_whisper_pair_results(ctx, pcm, german);
+        }
     }
 
     {

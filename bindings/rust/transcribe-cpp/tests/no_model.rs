@@ -41,6 +41,18 @@ fn abi_struct_sizes_are_live() {
 }
 
 #[test]
+fn stock_runtime_is_rejected_before_model_load() {
+    // Run this test alone with a stock 0.3.1 shared runtime on the loader path.
+    // A missing model would yield ModelFileNotFound if the ABI gate allowed it.
+    if std::env::var_os("TRANSCRIBE_TEST_STOCK_RUNTIME").is_none() {
+        eprintln!("skip stock runtime rejection: set TRANSCRIBE_TEST_STOCK_RUNTIME");
+        return;
+    }
+    let error = Model::load("missing-language-candidates-abi-model.gguf").unwrap_err();
+    assert!(matches!(error, Error::VersionMismatch(_)), "{error:?}");
+}
+
+#[test]
 fn generic_text_control_options_round_trip() {
     let options = RunOptions {
         pnc: Pnc::Off,

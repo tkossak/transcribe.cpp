@@ -11,7 +11,7 @@
 // Stable digest of the ABI surface (structs, enums, macros, layout,
 // prototypes), computed by the Python oracle and pinned here so a header
 // ABI change turns this binding's drift check red for conscious review.
-export const PUBLIC_HEADER_HASH = "57b1af43650f195d";
+export const PUBLIC_HEADER_HASH = "e54c77c3e35d02c1";
 
 // === enum constants ===
 export const TRANSCRIBE_OK = 0;
@@ -136,8 +136,8 @@ export const STRUCT_LAYOUT: Record<string, StructLayout> = {
   'transcribe_device_info': { size: 64, align: 8, offsets: {'struct_size': 0, 'name': 8, 'description': 16, 'kind': 24, 'device_id': 32, 'memory_total': 40, 'memory_free': 48, 'device_type': 56} },
   'transcribe_model_load_params': { size: 24, align: 8, offsets: {'struct_size': 0, 'backend': 8, 'device': 16} },
   'transcribe_session_params': { size: 24, align: 8, offsets: {'struct_size': 0, 'n_threads': 8, 'kv_type': 12, 'n_ctx': 16} },
-  'transcribe_run_params': { size: 104, align: 8, offsets: {'struct_size': 0, 'task': 8, 'timestamps': 12, 'pnc': 16, 'itn': 20, 'diarize': 24, 'language': 32, 'target_language': 40, 'keep_special_tags': 48, 'family': 56, 'spec_k_drafts': 64, 'vocabulary': 72, 'n_vocabulary': 80, 'prompt': 88, 'prefix': 96} },
-  'transcribe_capabilities': { size: 56, align: 8, offsets: {'struct_size': 0, 'native_sample_rate': 8, 'n_languages': 12, 'languages': 16, 'max_timestamp_kind': 24, 'supports_language_detect': 28, 'supports_translate': 29, 'supports_streaming': 30, 'supports_spec_decode': 31, 'max_audio_ms': 32, 'n_translate_target_languages': 40, 'translate_target_languages': 48} },
+  'transcribe_run_params': { size: 120, align: 8, offsets: {'struct_size': 0, 'task': 8, 'timestamps': 12, 'pnc': 16, 'itn': 20, 'diarize': 24, 'language': 32, 'target_language': 40, 'keep_special_tags': 48, 'family': 56, 'spec_k_drafts': 64, 'vocabulary': 72, 'n_vocabulary': 80, 'prompt': 88, 'prefix': 96, 'language_candidates': 104, 'n_language_candidates': 112} },
+  'transcribe_capabilities': { size: 64, align: 8, offsets: {'struct_size': 0, 'native_sample_rate': 8, 'n_languages': 12, 'languages': 16, 'max_timestamp_kind': 24, 'supports_language_detect': 28, 'supports_translate': 29, 'supports_streaming': 30, 'supports_spec_decode': 31, 'max_audio_ms': 32, 'n_translate_target_languages': 40, 'translate_target_languages': 48, 'supports_language_candidates': 56} },
   'transcribe_session_limits': { size: 32, align: 8, offsets: {'struct_size': 0, 'effective_n_ctx': 8, 'effective_max_audio_ms': 16, 'max_kv_bytes': 24} },
   'transcribe_stream_params': { size: 24, align: 8, offsets: {'struct_size': 0, 'family': 8, 'commit_policy': 16, 'stable_prefix_agreement_n': 20} },
   'transcribe_stream_update': { size: 48, align: 8, offsets: {'struct_size': 0, 'result_changed': 8, 'is_final': 9, 'revision': 12, 'input_received_ms': 16, 'audio_committed_ms': 24, 'buffered_ms': 32, 'committed_changed': 40, 'tentative_changed': 41} },
@@ -183,8 +183,8 @@ export function defineTypes(koffi: any): Record<string, any> {
   T['transcribe_device_info'] = koffi.struct({ struct_size: 'uint64_t', name: 'char *', description: 'char *', kind: 'char *', device_id: 'char *', memory_total: 'uint64_t', memory_free: 'uint64_t', device_type: 'int' });
   T['transcribe_model_load_params'] = koffi.struct({ struct_size: 'uint64_t', backend: 'int', device: 'void *' });
   T['transcribe_session_params'] = koffi.struct({ struct_size: 'uint64_t', n_threads: 'int', kv_type: 'int', n_ctx: 'int32_t' });
-  T['transcribe_run_params'] = koffi.struct({ struct_size: 'uint64_t', task: 'int', timestamps: 'int', pnc: 'int', itn: 'int', diarize: 'int', language: 'char *', target_language: 'char *', keep_special_tags: 'bool', family: 'void *', spec_k_drafts: 'int32_t', vocabulary: 'void *', n_vocabulary: 'int32_t', prompt: 'char *', prefix: 'char *' });
-  T['transcribe_capabilities'] = koffi.struct({ struct_size: 'uint64_t', native_sample_rate: 'int32_t', n_languages: 'int', languages: 'void *', max_timestamp_kind: 'int', supports_language_detect: 'bool', supports_translate: 'bool', supports_streaming: 'bool', supports_spec_decode: 'bool', max_audio_ms: 'int64_t', n_translate_target_languages: 'int', translate_target_languages: 'void *' });
+  T['transcribe_run_params'] = koffi.struct({ struct_size: 'uint64_t', task: 'int', timestamps: 'int', pnc: 'int', itn: 'int', diarize: 'int', language: 'char *', target_language: 'char *', keep_special_tags: 'bool', family: 'void *', spec_k_drafts: 'int32_t', vocabulary: 'void *', n_vocabulary: 'int32_t', prompt: 'char *', prefix: 'char *', language_candidates: 'void *', n_language_candidates: 'int32_t' });
+  T['transcribe_capabilities'] = koffi.struct({ struct_size: 'uint64_t', native_sample_rate: 'int32_t', n_languages: 'int', languages: 'void *', max_timestamp_kind: 'int', supports_language_detect: 'bool', supports_translate: 'bool', supports_streaming: 'bool', supports_spec_decode: 'bool', max_audio_ms: 'int64_t', n_translate_target_languages: 'int', translate_target_languages: 'void *', supports_language_candidates: 'bool' });
   T['transcribe_session_limits'] = koffi.struct({ struct_size: 'uint64_t', effective_n_ctx: 'int32_t', effective_max_audio_ms: 'int64_t', max_kv_bytes: 'int64_t' });
   T['transcribe_stream_params'] = koffi.struct({ struct_size: 'uint64_t', family: 'void *', commit_policy: 'int', stable_prefix_agreement_n: 'uint32_t' });
   T['transcribe_stream_update'] = koffi.struct({ struct_size: 'uint64_t', result_changed: 'bool', is_final: 'bool', revision: 'int32_t', input_received_ms: 'int64_t', audio_committed_ms: 'int64_t', buffered_ms: 'int64_t', committed_changed: 'bool', tentative_changed: 'bool' });

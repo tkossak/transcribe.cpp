@@ -1191,6 +1191,23 @@ struct transcribe_run_params {
     int32_t              n_vocabulary;
     const char *         prompt;
     const char *         prefix;
+
+    /*
+     * Restrict automatic source-language detection to an unordered pair.
+     * NULL / 0 disables the restriction. Otherwise exactly two distinct,
+     * non-empty codes from the loaded model's languages[] are required,
+     * supports_language_candidates must be true, and language must be
+     * NULL or empty. Invalid requests fail before decoding; there is no
+     * unrestricted fallback. Caller-owned strings live through the call.
+     *
+     * Whisper compares the existing first-window language logits in stable
+     * model order (including equal-score ties), once per recording, and
+     * independently for each batch utterance. The choice is returned as
+     * detected_language and reused for later windows. Translation remains
+     * independent: these candidates do not restrict the target or vocabulary.
+     */
+    const char * const * language_candidates;
+    int32_t              n_language_candidates;
 };
 
 TRANSCRIBE_API void transcribe_run_params_init(struct transcribe_run_params * params);
@@ -1341,6 +1358,13 @@ struct transcribe_capabilities {
      */
     int                  n_translate_target_languages;
     const char * const * translate_target_languages;
+
+    /*
+     * Loaded backend can restrict automatic source-language detection to
+     * two advertised languages. False for non-Whisper and English-only
+     * models. Never infer this support from supports_language_detect alone.
+     */
+    bool supports_language_candidates;
 };
 
 TRANSCRIBE_API void transcribe_capabilities_init(struct transcribe_capabilities * out);

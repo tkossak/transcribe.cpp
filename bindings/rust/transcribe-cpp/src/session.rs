@@ -59,6 +59,11 @@ pub struct RunOptions {
     /// an error elsewhere, and in batch and streaming runs). `text` holds only
     /// the continuation; `raw_text` leads with the prefix.
     pub prefix: Option<String>,
+    /// Automatic source-language detection restricted to two distinct codes
+    /// advertised by the loaded model. Empty preserves unrestricted Auto.
+    /// Requires `Capabilities::supports_language_candidates` and no nonempty
+    /// `language` hint; does not constrain translation output or vocabulary.
+    pub language_candidates: Vec<String>,
 }
 
 impl Default for RunOptions {
@@ -77,6 +82,7 @@ impl Default for RunOptions {
             vocabulary: Vec::new(),
             prompt: None,
             prefix: None,
+            language_candidates: Vec::new(),
         }
     }
 }
@@ -169,7 +175,7 @@ impl Session {
     /// transcript is preserved on the returned [`Error::Aborted`] /
     /// [`Error::OutputTruncated`] / [`Error::OutputRepetition`].
     pub fn run(&mut self, pcm: &[f32], options: &RunOptions) -> Result<Transcript> {
-        let (params, _lang, _target, _family, _prompting) = build_run_params(options)?;
+        let (params, _lang, _target, _family, _prompting, _candidates) = build_run_params(options)?;
         let n = clamp_len(pcm.len())?;
 
         // The compute path is serialized per model; hold the lock for the native
@@ -213,7 +219,7 @@ impl Session {
         pcms: &[&[f32]],
         options: &RunOptions,
     ) -> Result<Vec<Result<Transcript>>> {
-        let (params, _lang, _target, _family, _prompting) = build_run_params(options)?;
+        let (params, _lang, _target, _family, _prompting, _candidates) = build_run_params(options)?;
         let ptrs: Vec<*const f32> = pcms.iter().map(|p| p.as_ptr()).collect();
         let lens: Vec<i32> = pcms
             .iter()
@@ -291,7 +297,7 @@ impl Session {
     /// Dropping the returned `Stream` abandons it and returns the session to
     /// idle.
     pub fn stream(&mut self, run: &RunOptions, stream: &StreamOptions) -> Result<Stream<'_>> {
-        let (run_params, _lang, _target, _family, _prompting) = build_run_params(run)?;
+        let (run_params, _lang, _target, _family, _prompting, _candidates) = build_run_params(run)?;
         let (stream_params, _stream_family) = build_stream_params(stream);
         {
             // Claim the model's compute lease for the whole stream lifetime: a
@@ -448,6 +454,7 @@ type RunParamsBundle = (
     Option<CString>,
     Option<RunExtRaw>,
     PromptingKeepalive,
+    LanguageCandidatesKeepalive,
 );
 
 /// Owns the buffers behind the prompting pointers of a `transcribe_run_params`.
@@ -456,6 +463,12 @@ struct PromptingKeepalive {
     _term_ptrs: Vec<*const std::os::raw::c_char>,
     _prompt: Option<CString>,
     _prefix: Option<CString>,
+}
+
+/// Owns both levels of the candidate pointer array through the native call.
+struct LanguageCandidatesKeepalive {
+    _codes: Vec<CString>,
+    _ptrs: Vec<*const std::os::raw::c_char>,
 }
 
 /// Build `transcribe_run_params` from options. The returned keepalives own the
@@ -477,6 +490,23 @@ fn build_run_params(o: &RunOptions) -> Result<RunParamsBundle> {
     let target = o.target_language.as_deref().map(CString::new).transpose()?;
     params.language = lang.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
     params.target_language = target.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
+
+    let codes = o
+        .language_candidates
+        .iter()
+        .map(|code| CString::new(code.as_str()))
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let ptrs: Vec<*const std::os::raw::c_char> = codes.iter().map(|code| code.as_ptr()).collect();
+    params.language_candidates = if ptrs.is_empty() {
+        std::ptr::null()
+    } else {
+        ptrs.as_ptr()
+    };
+    params.n_language_candidates = clamp_len(ptrs.len())?;
+    let candidates = LanguageCandidatesKeepalive {
+        _codes: codes,
+        _ptrs: ptrs,
+    };
 
     let family = o
         .family
@@ -508,7 +538,7 @@ fn build_run_params(o: &RunOptions) -> Result<RunParamsBundle> {
         _prefix: prefix,
     };
 
-    Ok((params, lang, target, family, prompting))
+    Ok((params, lang, target, family, prompting, candidates))
 }
 
 /// PCM/utterance lengths cross the ABI as `int`; reject anything that overflows.

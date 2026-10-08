@@ -240,6 +240,8 @@ static void test_init_macros(void) {
     CHECK(rp_macro.target_language == NULL);
     CHECK(rp_macro.keep_special_tags == false);
     CHECK(rp_macro.family == NULL);
+    CHECK(rp_macro.language_candidates == NULL);
+    CHECK(rp_macro.n_language_candidates == 0);
 
     struct transcribe_stream_params sp_macro;
     transcribe_stream_params_init(&sp_macro);
@@ -295,6 +297,7 @@ static void test_init_macros(void) {
     CHECK(caps_macro.supports_language_detect == false);
     CHECK(caps_macro.supports_translate == false);
     CHECK(caps_macro.supports_streaming == false);
+    CHECK(caps_macro.supports_language_candidates == false);
 
     struct transcribe_timings tm_macro;
     transcribe_timings_init(&tm_macro);

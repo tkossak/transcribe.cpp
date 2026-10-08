@@ -115,6 +115,7 @@ fn missing_fields_take_defaults() {
     // `RunOptions::default()` is hand-written; its -1 sentinel must survive.
     let run: RunOptions = serde_json::from_str(r#"{"language":"fr"}"#).unwrap();
     assert_eq!(run.spec_k_drafts, -1);
+    assert!(run.language_candidates.is_empty());
     assert_eq!(
         run,
         RunOptions {
@@ -128,4 +129,67 @@ fn missing_fields_take_defaults() {
     assert!(token.p.is_nan(), "missing p decoded as {}", token.p);
     let speaker: SpeakerSegment = serde_json::from_str(r#"{"speaker_id":2}"#).unwrap();
     assert!(speaker.p.is_nan(), "missing p decoded as {}", speaker.p);
+}
+
+#[test]
+fn recognition_candidates_survive_worker_transport_without_changing_task() {
+    for candidates in [
+        vec!["pl".into(), "de".into()],
+        vec!["pl".into()],
+        vec!["pl".into(), "pl".into()],
+    ] {
+        let original = RunOptions {
+            task: Task::Translate,
+            language_candidates: candidates,
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&original).unwrap();
+        let from_json: RunOptions = serde_json::from_str(&json).unwrap();
+        assert_eq!(from_json, original);
+        let bytes = postcard::to_allocvec(&original).unwrap();
+        let from_postcard: RunOptions = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(from_postcard, original);
+    }
+}
+
+#[test]
+fn loaded_candidate_capability_is_preserved_and_legacy_metadata_fails_closed() {
+    let legacy = r#"{
+        "native_sample_rate":16000,
+        "languages":["pl","en"],
+        "translate_target_languages":["en"],
+        "max_timestamp_kind":"Segment",
+        "supports_language_detect":true,
+        "supports_translate":true,
+        "supports_streaming":false,
+        "supports_spec_decode":false,
+        "max_audio_ms":0
+    }"#;
+    let mut caps: Capabilities = serde_json::from_str(legacy).unwrap();
+    assert!(!caps.supports_language_candidates);
+    caps.supports_language_candidates = true;
+
+    let json = serde_json::to_string(&caps).unwrap();
+    let from_json: Capabilities = serde_json::from_str(&json).unwrap();
+    assert_eq!(from_json, caps);
+    let bytes = postcard::to_allocvec(&caps).unwrap();
+    let from_postcard: Capabilities = postcard::from_bytes(&bytes).unwrap();
+    assert_eq!(from_postcard, caps);
+}
+
+#[test]
+fn translated_worker_result_retains_detected_source_language() {
+    let original = Transcript {
+        text: "Good morning.".into(),
+        language: Some("pl".into()),
+        ..Default::default()
+    };
+    let json = serde_json::to_string(&original).unwrap();
+    let from_json: Transcript = serde_json::from_str(&json).unwrap();
+    assert_eq!(from_json.language.as_deref(), Some("pl"));
+    assert_eq!(from_json.text, "Good morning.");
+    let bytes = postcard::to_allocvec(&original).unwrap();
+    let from_postcard: Transcript = postcard::from_bytes(&bytes).unwrap();
+    assert_eq!(from_postcard.language.as_deref(), Some("pl"));
+    assert_eq!(from_postcard.text, "Good morning.");
 }

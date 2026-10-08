@@ -64,6 +64,10 @@ pub struct Capabilities {
     pub supports_spec_decode: bool,
     /// Longest accepted audio in ms (0 = no practical limit).
     pub max_audio_ms: i64,
+    /// Whether automatic source-language detection can be restricted to a pair
+    /// of distinct codes from `languages`.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub supports_language_candidates: bool,
 }
 
 /// The native model handle plus the per-model compute lock, shared via `Arc`.
@@ -190,6 +194,7 @@ impl Model {
             supports_streaming: caps.supports_streaming,
             supports_spec_decode: caps.supports_spec_decode,
             max_audio_ms: caps.max_audio_ms,
+            supports_language_candidates: caps.supports_language_candidates,
         }
     }
 

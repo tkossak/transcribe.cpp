@@ -42,10 +42,21 @@ mod smoke {
     }
 
     #[test]
-    fn abi_struct_size_is_live() {
-        // A real call into the native lib that returns a runtime value.
-        let size =
-            unsafe { transcribe_abi_struct_size(transcribe_abi_struct::TRANSCRIBE_ABI_RUN_PARAMS) };
-        assert!(size > 0);
+    fn abi_struct_sizes_and_alignment_match_the_linked_runtime() {
+        for (which, expected_size, expected_align) in [
+            (
+                transcribe_abi_struct::TRANSCRIBE_ABI_RUN_PARAMS,
+                std::mem::size_of::<transcribe_run_params>(),
+                std::mem::align_of::<transcribe_run_params>(),
+            ),
+            (
+                transcribe_abi_struct::TRANSCRIBE_ABI_CAPABILITIES,
+                std::mem::size_of::<transcribe_capabilities>(),
+                std::mem::align_of::<transcribe_capabilities>(),
+            ),
+        ] {
+            assert_eq!(unsafe { transcribe_abi_struct_size(which) }, expected_size);
+            assert_eq!(unsafe { transcribe_abi_struct_align(which) }, expected_align);
+        }
     }
 }

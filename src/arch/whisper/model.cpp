@@ -10,6 +10,7 @@
 #include "ggml-backend.h"
 #include "ggml.h"
 #include "gguf.h"
+#include "language-choice.h"
 #include "transcribe-arch.h"
 #include "transcribe-batch-util.h"
 #include "transcribe-debug.h"
@@ -536,16 +537,18 @@ transcribe_status whisper_load(Loader &                             loader,
             }
             const std::string piece = std::string("<|") + code + "|>";
             const int         id    = m->tok.find(piece);
-            if (id < 0) {
+            if (id < 0 || id >= m->hparams.dec_vocab_size) {
                 log_msg(TRANSCRIBE_LOG_LEVEL_ERROR,
-                        "whisper: language '%s' has no '%s' token "
-                        "in tokenizer vocab",
+                        "whisper: language '%s' has no usable '%s' token "
+                        "in decoder vocab",
                         code, piece.c_str());
                 return TRANSCRIBE_ERR_GGUF;
             }
             m->lang_token_ids.push_back(static_cast<int32_t>(id));
         }
     }
+    m->caps.supports_language_candidates =
+        has_language_pair(m->lang_codes, m->lang_token_ids, m->hparams.dec_vocab_size, is_multilingual);
 
     m->t_load_us = ggml_time_us() - t_load_start;
     *out_model   = m.release();
@@ -1808,18 +1811,12 @@ transcribe_status whisper_run(transcribe_session *          session,
             const size_t row_bytes = static_cast<size_t>(vocab_size) * sizeof(float);
             ggml_backend_tensor_get(det_db.dumps.logits_raw, last_logits.data(), 0, row_bytes);
 
-            float best       = -INFINITY;
-            int   best_index = -1;
-            for (size_t i = 0; i < cm->lang_token_ids.size(); ++i) {
-                const int32_t id = cm->lang_token_ids[i];
-                if (id >= 0 && id < static_cast<int>(vocab_size)) {
-                    const float v = last_logits[static_cast<size_t>(id)];
-                    if (v > best) {
-                        best       = v;
-                        lang_token = id;
-                        best_index = static_cast<int>(i);
-                    }
-                }
+            const int best_index = select_language_index(
+                cm->lang_codes, cm->lang_token_ids, last_logits.data(), vocab_size,
+                params != nullptr ? params->language_candidates : nullptr,
+                params != nullptr ? params->n_language_candidates : 0);
+            if (best_index >= 0) {
+                lang_token = cm->lang_token_ids[static_cast<size_t>(best_index)];
             }
             // Publish the detected ISO code only here, not in the user-hint
             // branch: the field means "what the model picked", not the hint.
@@ -2938,15 +2935,12 @@ transcribe_status whisper_run_batch(transcribe_session *          session,
             std::vector<float> ll(static_cast<size_t>(vocab_size));
             ggml_backend_tensor_get(det.dumps.logits_raw, ll.data(), 0,
                                     static_cast<size_t>(vocab_size) * sizeof(float));
-            float best     = -INFINITY;
-            int   best_idx = -1;
-            for (size_t i = 0; i < cm->lang_token_ids.size(); ++i) {
-                const int32_t id = cm->lang_token_ids[i];
-                if (id >= 0 && id < static_cast<int>(vocab_size) && ll[static_cast<size_t>(id)] > best) {
-                    best       = ll[static_cast<size_t>(id)];
-                    lang_token = id;
-                    best_idx   = static_cast<int>(i);
-                }
+            const int best_idx = select_language_index(
+                cm->lang_codes, cm->lang_token_ids, ll.data(), vocab_size,
+                params != nullptr ? params->language_candidates : nullptr,
+                params != nullptr ? params->n_language_candidates : 0);
+            if (best_idx >= 0) {
+                lang_token = cm->lang_token_ids[static_cast<size_t>(best_idx)];
             }
             if (best_idx >= 0 && static_cast<size_t>(best_idx) < cm->lang_codes.size()) {
                 det_lang[b] = cm->lang_codes[static_cast<size_t>(best_idx)];

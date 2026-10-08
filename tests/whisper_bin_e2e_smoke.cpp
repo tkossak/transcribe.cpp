@@ -78,6 +78,8 @@ const char * env_or_null(const char * key) {
     const char * v = std::getenv(key);
     return (v != nullptr && v[0] != '\0') ? v : nullptr;
 }
+#include "whisper_pair_checks.h"
+
 
 void test_multilingual(const char * model_path) {
     std::vector<float> jfk;
@@ -110,6 +112,7 @@ void test_multilingual(const char * model_path) {
     if (caps != nullptr) {
         CHECK(caps->native_sample_rate == 16000);
         CHECK(caps->supports_language_detect);
+        CHECK(caps->supports_language_candidates);
         CHECK(caps->supports_translate);
         CHECK(transcribe_model_supports(model, TRANSCRIBE_FEATURE_LONG_FORM));
         CHECK(transcribe_model_supports(model, TRANSCRIBE_FEATURE_INITIAL_PROMPT));
@@ -138,6 +141,8 @@ void test_multilingual(const char * model_path) {
         transcribe_model_free(model);
         return;
     }
+
+    check_whisper_pair_results(ctx, jfk, german);
 
     // English JFK with explicit hint.
     {
@@ -326,6 +331,7 @@ void test_english_only(const char * model_path) {
     CHECK(caps != nullptr);
     if (caps != nullptr) {
         CHECK(!caps->supports_language_detect);
+        CHECK(!caps->supports_language_candidates);
         CHECK(!caps->supports_translate);
         CHECK(caps->n_languages == 1);
         CHECK(caps->languages != nullptr);
@@ -342,6 +348,19 @@ void test_english_only(const char * model_path) {
     if (st != TRANSCRIBE_OK || ctx == nullptr) {
         transcribe_model_free(model);
         return;
+    }
+
+    {
+        const char * pair[] = { "en", "de" };
+        transcribe_run_params rp;
+        transcribe_run_params_init(&rp);
+        rp.language_candidates = pair;
+        rp.n_language_candidates = 2;
+        CHECK(transcribe_run(ctx, jfk.data(), static_cast<int>(jfk.size()), &rp) ==
+              TRANSCRIBE_ERR_UNSUPPORTED_LANGUAGE);
+        const float * inputs[] = { jfk.data(), jfk.data() };
+        const int lengths[] = { static_cast<int>(jfk.size()), static_cast<int>(jfk.size()) };
+        CHECK(transcribe_run_batch(ctx, inputs, lengths, 2, &rp) == TRANSCRIBE_ERR_UNSUPPORTED_LANGUAGE);
     }
 
     // No language hint — lang detection short-circuits to "en"

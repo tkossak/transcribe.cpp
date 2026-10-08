@@ -362,8 +362,41 @@ transcribe_status validate_run_params_common(const transcribe_session * session,
             return TRANSCRIBE_ERR_UNSUPPORTED_TIMESTAMPS;
         }
     }
-    if (params->language != nullptr && session->model->caps.n_languages > 0 &&
-        session->model->caps.languages != nullptr) {
+    // Pair restrictions are hard gates, never soft hints. Keep validation
+    // shared by run, batch and stream so no entry point can ignore them.
+    const int n_candidates = params->n_language_candidates;
+    if (n_candidates != 0 || params->language_candidates != nullptr) {
+        if (n_candidates != 2 || params->language_candidates == nullptr ||
+            (params->language != nullptr && params->language[0] != '\0')) {
+            return TRANSCRIBE_ERR_INVALID_ARG;
+        }
+        const char * a = params->language_candidates[0];
+        const char * b = params->language_candidates[1];
+        if (a == nullptr || b == nullptr || a[0] == '\0' || b[0] == '\0' || std::strcmp(a, b) == 0) {
+            return TRANSCRIBE_ERR_INVALID_ARG;
+        }
+        const auto & caps = session->model->caps;
+        const auto * arch = session->model->arch;
+        if (arch == nullptr || arch->name == nullptr || std::strcmp(arch->name, "whisper") != 0 ||
+            !caps.supports_language_detect || !caps.supports_language_candidates ||
+            caps.languages == nullptr || caps.n_languages < 2) {
+            return TRANSCRIBE_ERR_UNSUPPORTED_LANGUAGE;
+        }
+        bool found_a = false;
+        bool found_b = false;
+        for (int i = 0; i < caps.n_languages; ++i) {
+            const char * code = caps.languages[i];
+            if (code != nullptr) {
+                found_a = found_a || std::strcmp(code, a) == 0;
+                found_b = found_b || std::strcmp(code, b) == 0;
+            }
+        }
+        if (!found_a || !found_b) {
+            return TRANSCRIBE_ERR_UNSUPPORTED_LANGUAGE;
+        }
+    }
+    if (params->language != nullptr && (n_candidates == 0 || params->language[0] != '\0') &&
+        session->model->caps.n_languages > 0 && session->model->caps.languages != nullptr) {
         bool found = false;
         for (int i = 0; i < session->model->caps.n_languages; ++i) {
             const char * entry = session->model->caps.languages[i];
