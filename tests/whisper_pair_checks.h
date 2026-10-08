@@ -36,22 +36,6 @@ static void check_whisper_pair_results(transcribe_session * session,
     CHECK(std::strcmp(transcribe_batch_detected_language(session, 0), "en") == 0);
     CHECK(std::strcmp(transcribe_batch_detected_language(session, 1), "de") == 0);
 
-    // A one-utterance batch always takes Whisper's serial fallback, on CPU
-    // and GPU. Use a valid long-form prompt policy, then verify each slot
-    // succeeded before inspecting its independently detected source.
-    transcribe_whisper_run_ext w;
-    transcribe_whisper_run_ext_init(&w);
-    w.prompt_condition = TRANSCRIBE_WHISPER_PROMPT_ALL_SEGMENTS;
-    w.condition_on_prev_tokens = true;
-    p.family = &w.ext;
-    for (int i = 0; i < 2; ++i) {
-        CHECK(transcribe_run_batch(session, inputs + i, lengths + i, 1, &p) == TRANSCRIBE_OK);
-        CHECK(transcribe_batch_n_results(session) == 1);
-        CHECK(transcribe_batch_status(session, 0) == TRANSCRIBE_OK);
-        CHECK(std::strcmp(transcribe_batch_detected_language(session, 0), i == 0 ? "en" : "de") == 0);
-    }
-    p.family = nullptr;
-
     // More than one encoder window: the later German speech cannot change
     // the initial English recognition decision. This is a timing invariant,
     // not a claim of mixed-language transcription quality.
@@ -61,6 +45,23 @@ static void check_whisper_pair_results(transcribe_session * session,
     }
     long_audio.resize(480000);
     long_audio.insert(long_audio.end(), german.begin(), german.end());
+    // Long-form input requires serial fallback on any backend. Keep two
+    // utterances in one call to catch a decision leaking to the next entry.
+    const float * fallback_inputs[] = { long_audio.data(), german.data() };
+    const int fallback_lengths[] = { static_cast<int>(long_audio.size()), static_cast<int>(german.size()) };
+    transcribe_whisper_run_ext w;
+    transcribe_whisper_run_ext_init(&w);
+    w.prompt_condition = TRANSCRIBE_WHISPER_PROMPT_ALL_SEGMENTS;
+    w.condition_on_prev_tokens = true;
+    p.family = &w.ext;
+    CHECK(transcribe_run_batch(session, fallback_inputs, fallback_lengths, 2, &p) == TRANSCRIBE_OK);
+    CHECK(transcribe_batch_n_results(session) == 2);
+    CHECK(transcribe_batch_status(session, 0) == TRANSCRIBE_OK);
+    CHECK(transcribe_batch_status(session, 1) == TRANSCRIBE_OK);
+    CHECK(std::strcmp(transcribe_batch_detected_language(session, 0), "en") == 0);
+    CHECK(std::strcmp(transcribe_batch_detected_language(session, 1), "de") == 0);
+    p.family = nullptr;
+
     CHECK(transcribe_run(session, long_audio.data(), static_cast<int>(long_audio.size()), &p) == TRANSCRIBE_OK);
     CHECK(std::strcmp(transcribe_detected_language(session), "en") == 0);
 
