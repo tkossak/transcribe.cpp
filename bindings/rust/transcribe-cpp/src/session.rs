@@ -454,7 +454,7 @@ type RunParamsBundle = (
     Option<CString>,
     Option<RunExtRaw>,
     PromptingKeepalive,
-    LanguageCandidatesKeepalive,
+    Option<Box<LanguageCandidatesKeepalive>>,
 );
 
 /// Owns the buffers behind the prompting pointers of a `transcribe_run_params`.
@@ -466,9 +466,10 @@ struct PromptingKeepalive {
 }
 
 /// Owns both levels of the candidate pointer array through the native call.
+/// Boxed so the pointer array stays valid when the run bundle moves.
 struct LanguageCandidatesKeepalive {
-    _codes: Vec<CString>,
-    _ptrs: Vec<*const std::os::raw::c_char>,
+    _codes: [CString; 2],
+    ptrs: [*const std::os::raw::c_char; 2],
 }
 
 /// Build `transcribe_run_params` from options. The returned keepalives own the
@@ -491,21 +492,27 @@ fn build_run_params(o: &RunOptions) -> Result<RunParamsBundle> {
     params.language = lang.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
     params.target_language = target.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
 
-    let codes = o
-        .language_candidates
-        .iter()
-        .map(|code| CString::new(code.as_str()))
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-    let ptrs: Vec<*const std::os::raw::c_char> = codes.iter().map(|code| code.as_ptr()).collect();
-    params.language_candidates = if ptrs.is_empty() {
-        std::ptr::null()
-    } else {
-        ptrs.as_ptr()
-    };
-    params.n_language_candidates = clamp_len(ptrs.len())?;
-    let candidates = LanguageCandidatesKeepalive {
-        _codes: codes,
-        _ptrs: ptrs,
+    let candidates = match o.language_candidates.as_slice() {
+        [] => None,
+        [first, second] => {
+            let codes = [
+                CString::new(first.as_str())?,
+                CString::new(second.as_str())?,
+            ];
+            let ptrs = [codes[0].as_ptr(), codes[1].as_ptr()];
+            let candidates = Box::new(LanguageCandidatesKeepalive {
+                _codes: codes,
+                ptrs,
+            });
+            params.language_candidates = candidates.ptrs.as_ptr();
+            params.n_language_candidates = 2;
+            Some(candidates)
+        }
+        _ => {
+            return Err(Error::InvalidArgument(
+                "language candidates require exactly two codes".into(),
+            ))
+        }
     };
 
     let family = o
