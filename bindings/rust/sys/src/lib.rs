@@ -56,7 +56,10 @@ mod smoke {
             ),
         ] {
             assert_eq!(unsafe { transcribe_abi_struct_size(which) }, expected_size);
-            assert_eq!(unsafe { transcribe_abi_struct_align(which) }, expected_align);
+            assert_eq!(
+                unsafe { transcribe_abi_struct_align(which) },
+                expected_align
+            );
         }
     }
 }

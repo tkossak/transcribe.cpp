@@ -24,12 +24,12 @@ fn assert_pair_capability(model: &Model) {
 
 #[test]
 fn pair_detects_each_recording_independently_of_candidate_order() {
-    let (Some(polish), Some(english)) = (common::pair_audio("pl"), common::pair_audio("en"))
-    else {
+    let (Some(polish), Some(english)) = (common::pair_audio("pl"), common::pair_audio("en")) else {
         eprintln!("skip pair detection: Polish/English speech fixtures unavailable");
         return;
     };
-    for path in common::pair_models("pair_detects_each_recording_independently_of_candidate_order") {
+    for path in common::pair_models("pair_detects_each_recording_independently_of_candidate_order")
+    {
         let model = Model::load(&path).unwrap();
         assert_pair_capability(&model);
         let mut session = model.session().unwrap();
@@ -37,7 +37,11 @@ fn pair_detects_each_recording_independently_of_candidate_order() {
             let options = pair(candidates);
             for (audio, expected) in [(&polish, "pl"), (&english, "en"), (&polish, "pl")] {
                 let result = session.run(audio, &options).unwrap();
-                assert_eq!(result.language.as_deref(), Some(expected), "{path:?}: {result:?}");
+                assert_eq!(
+                    result.language.as_deref(),
+                    Some(expected),
+                    "{path:?}: {result:?}"
+                );
             }
         }
     }
@@ -45,8 +49,7 @@ fn pair_detects_each_recording_independently_of_candidate_order() {
 
 #[test]
 fn pair_batch_keeps_each_utterances_detected_language() {
-    let (Some(polish), Some(english)) = (common::pair_audio("pl"), common::pair_audio("en"))
-    else {
+    let (Some(polish), Some(english)) = (common::pair_audio("pl"), common::pair_audio("en")) else {
         eprintln!("skip pair batch: Polish/English speech fixtures unavailable");
         return;
     };
@@ -61,7 +64,11 @@ fn pair_batch_keeps_each_utterances_detected_language() {
             assert_eq!(results.len(), 3);
             for (result, expected) in results.into_iter().zip(["pl", "en", "pl"]) {
                 let result = result.unwrap();
-                assert_eq!(result.language.as_deref(), Some(expected), "{path:?}: {result:?}");
+                assert_eq!(
+                    result.language.as_deref(),
+                    Some(expected),
+                    "{path:?}: {result:?}"
+                );
             }
         }
     }
@@ -94,17 +101,28 @@ fn malformed_pairs_and_forced_language_conflicts_are_rejected() {
         let model = Model::load(&path).unwrap();
         assert_pair_capability(&model);
         let mut session = model.session().unwrap();
-        for codes in [vec!["en"], vec!["pl", "en", "de"], vec!["en", "en"], vec!["", "en"]] {
+        for codes in [
+            vec!["en"],
+            vec!["pl", "en", "de"],
+            vec!["en", "en"],
+            vec!["", "en"],
+        ] {
             let options = RunOptions {
                 language_candidates: codes.into_iter().map(String::from).collect(),
                 ..Default::default()
             };
             assert!(
-                matches!(session.run(&audio, &options), Err(Error::InvalidArgument(_))),
+                matches!(
+                    session.run(&audio, &options),
+                    Err(Error::InvalidArgument(_))
+                ),
                 "{path:?}: {options:?}"
             );
             assert!(
-                matches!(session.run_batch(&[&audio], &options), Err(Error::InvalidArgument(_))),
+                matches!(
+                    session.run_batch(&[&audio], &options),
+                    Err(Error::InvalidArgument(_))
+                ),
                 "{path:?}: {options:?}"
             );
         }
@@ -112,26 +130,40 @@ fn malformed_pairs_and_forced_language_conflicts_are_rejected() {
             language: Some("en".into()),
             ..pair(["pl", "en"])
         };
-        assert!(matches!(session.run(&audio, &conflict), Err(Error::InvalidArgument(_))));
-        assert!(matches!(session.run_batch(&[&audio], &conflict), Err(Error::InvalidArgument(_))));
+        assert!(matches!(
+            session.run(&audio, &conflict),
+            Err(Error::InvalidArgument(_))
+        ));
+        assert!(matches!(
+            session.run_batch(&[&audio], &conflict),
+            Err(Error::InvalidArgument(_))
+        ));
     }
 }
 
 #[test]
 fn unadvertised_candidates_are_rejected_instead_of_falling_back() {
     let audio = [0.0; 1600];
-    for path in common::pair_models("unadvertised_candidates_are_rejected_instead_of_falling_back") {
+    for path in common::pair_models("unadvertised_candidates_are_rejected_instead_of_falling_back")
+    {
         let model = Model::load(&path).unwrap();
         assert_pair_capability(&model);
         let mut session = model.session().unwrap();
-        for candidates in [["pl", "not-a-language"], ["not-a-language", "also-not-a-language"], ["pl", "EN"]] {
+        for candidates in [
+            ["pl", "not-a-language"],
+            ["not-a-language", "also-not-a-language"],
+            ["pl", "EN"],
+        ] {
             let options = pair(candidates);
             assert!(
                 matches!(session.run(&audio, &options), Err(Error::Unsupported(_))),
                 "{path:?}: {options:?}"
             );
             assert!(
-                matches!(session.run_batch(&[&audio], &options), Err(Error::Unsupported(_))),
+                matches!(
+                    session.run_batch(&[&audio], &options),
+                    Err(Error::Unsupported(_))
+                ),
                 "{path:?}: {options:?}"
             );
         }
@@ -141,8 +173,14 @@ fn unadvertised_candidates_are_rejected_instead_of_falling_back() {
 fn assert_incompatible_pair_is_rejected(session: &mut Session) {
     let audio = [0.0; 1600];
     let options = pair(["pl", "en"]);
-    assert!(matches!(session.run(&audio, &options), Err(Error::Unsupported(_))));
-    assert!(matches!(session.run_batch(&[&audio], &options), Err(Error::Unsupported(_))));
+    assert!(matches!(
+        session.run(&audio, &options),
+        Err(Error::Unsupported(_))
+    ));
+    assert!(matches!(
+        session.run_batch(&[&audio], &options),
+        Err(Error::Unsupported(_))
+    ));
     // Streaming availability is checked before run options by the native
     // dispatcher. Preserve its existing distinct "no streaming path" error;
     // a stream-capable non-Whisper model must reject the restriction itself.
@@ -150,7 +188,9 @@ fn assert_incompatible_pair_is_rejected(session: &mut Session) {
     match session.stream(&options, &StreamOptions::default()) {
         Err(Error::Unsupported(_)) if supports_streaming => {}
         Err(Error::NotImplemented(_)) if !supports_streaming => {}
-        Err(error) => panic!("unexpected streaming rejection: {error:?}; supports_streaming={supports_streaming}"),
+        Err(error) => panic!(
+            "unexpected streaming rejection: {error:?}; supports_streaming={supports_streaming}"
+        ),
         Ok(_) => panic!("an incompatible recognition pair must not begin streaming"),
     }
 }
@@ -184,13 +224,21 @@ fn non_whisper_rejects_pair_including_stream_begin() {
 
 #[test]
 fn candidate_strings_with_nul_are_rejected_by_all_safe_entry_points() {
-    for path in common::pair_models("candidate_strings_with_nul_are_rejected_by_all_safe_entry_points") {
+    for path in
+        common::pair_models("candidate_strings_with_nul_are_rejected_by_all_safe_entry_points")
+    {
         let mut session = Model::load(path).unwrap().session().unwrap();
         let audio = [0.0; 1600];
         let options = pair(["pl\0en", "en"]);
         assert!(matches!(session.run(&audio, &options), Err(Error::Nul(_))));
-        assert!(matches!(session.run_batch(&[&audio], &options), Err(Error::Nul(_))));
-        assert!(matches!(session.stream(&options, &StreamOptions::default()), Err(Error::Nul(_))));
+        assert!(matches!(
+            session.run_batch(&[&audio], &options),
+            Err(Error::Nul(_))
+        ));
+        assert!(matches!(
+            session.stream(&options, &StreamOptions::default()),
+            Err(Error::Nul(_))
+        ));
     }
 }
 
@@ -200,7 +248,9 @@ fn translation_keeps_detected_source_when_english_is_outside_pair() {
         eprintln!("skip pair translation: canonical German speech fixture unavailable");
         return;
     };
-    for path in common::pair_models("translation_keeps_detected_source_when_english_is_outside_pair") {
+    for path in
+        common::pair_models("translation_keeps_detected_source_when_english_is_outside_pair")
+    {
         let model = Model::load(&path).unwrap();
         assert_pair_capability(&model);
         let caps = model.capabilities().unwrap();
@@ -213,17 +263,27 @@ fn translation_keeps_detected_source_when_english_is_outside_pair() {
             ..pair(["de", "pl"])
         };
         let result = session.run(&german, &options).unwrap();
-        assert_eq!(result.language.as_deref(), Some("de"), "{path:?}: {result:?}");
+        assert_eq!(
+            result.language.as_deref(),
+            Some("de"),
+            "{path:?}: {result:?}"
+        );
         // The canonical german.wav describes the beach and sun. These English
         // words establish translation output independently of source detection.
         let text = result.text.to_lowercase();
-        assert!(text.contains("beach") || text.contains("sun"), "{path:?}: {result:?}");
+        assert!(
+            text.contains("beach") || text.contains("sun"),
+            "{path:?}: {result:?}"
+        );
         let batch = session.run_batch(&[&german], &options).unwrap();
         assert_eq!(batch.len(), 1);
         let translated = batch.into_iter().next().unwrap().unwrap();
         assert_eq!(translated.language.as_deref(), Some("de"));
         let text = translated.text.to_lowercase();
-        assert!(text.contains("beach") || text.contains("sun"), "{path:?}: {translated:?}");
+        assert!(
+            text.contains("beach") || text.contains("sun"),
+            "{path:?}: {translated:?}"
+        );
     }
 }
 
@@ -254,6 +314,10 @@ fn empty_candidates_preserve_auto_and_single_language() {
             ..pair(["pl", "en"])
         };
         let result = session.run(&english, &empty_hint).unwrap();
-        assert_eq!(result.language.as_deref(), Some("en"), "{path:?}: {result:?}");
+        assert_eq!(
+            result.language.as_deref(),
+            Some("en"),
+            "{path:?}: {result:?}"
+        );
     }
 }
