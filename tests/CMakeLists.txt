@@ -54,6 +54,27 @@ target_link_libraries(transcribe_api_smoke PRIVATE transcribe)
 
 add_test(NAME transcribe_api_smoke COMMAND transcribe_api_smoke)
 
+# Private Whisper candidate policy, no model weights or runtime dependencies.
+add_executable(transcribe_whisper_language_choice_unit whisper_language_choice_unit.cpp)
+target_include_directories(transcribe_whisper_language_choice_unit PRIVATE
+    ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/include)
+target_compile_features(transcribe_whisper_language_choice_unit PRIVATE cxx_std_17)
+transcribe_apply_warnings(transcribe_whisper_language_choice_unit)
+add_test(NAME transcribe_whisper_language_choice_unit
+    COMMAND transcribe_whisper_language_choice_unit)
+
+# Public C ABI inference coverage also works in the shared-library posture.
+# Unlike the historical binary smoke, this accepts any multilingual size.
+if(TRANSCRIBE_BUILD_REAL_MODEL_TESTS)
+    add_executable(transcribe_whisper_pair_e2e whisper_pair_e2e.cpp)
+    target_link_libraries(transcribe_whisper_pair_e2e PRIVATE transcribe transcribe-common-example)
+    target_compile_definitions(transcribe_whisper_pair_e2e PRIVATE
+        "TRANSCRIBE_TEST_SAMPLES_DIR=\"${CMAKE_SOURCE_DIR}/samples\"")
+    transcribe_apply_warnings(transcribe_whisper_pair_e2e)
+    add_test(NAME transcribe_whisper_pair_e2e COMMAND transcribe_whisper_pair_e2e)
+    set_tests_properties(transcribe_whisper_pair_e2e PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
 # Allowed-backend mask (transcribe_init_backends_ex). The mask is fixed per
 # process, so each scenario is its own test invocation.
 add_executable(transcribe_backend_mask_unit

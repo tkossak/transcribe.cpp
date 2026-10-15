@@ -8,6 +8,7 @@
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
 #include "ggml.h"
+#include "language-choice.h"
 #include "transcribe-arch.h"
 #include "transcribe-bin-loader.h"
 #include "transcribe-load-common.h"
@@ -484,6 +485,8 @@ void apply_caps_and_languages(WhisperModel & m, const transcribe::bin_loader::Wh
     // Publish to the capability surface so transcribe_get_model_capabilities()
     // ->languages/->n_languages matches the GGUF path.
     m.set_languages(m.lang_codes);
+    m.caps.supports_language_candidates =
+        has_language_pair(m.lang_codes, m.lang_token_ids, m.hparams.dec_vocab_size, m.caps.supports_language_detect);
 }
 
 // Build the Tokenizer via the raw-bytes loader (the .bin vocab is

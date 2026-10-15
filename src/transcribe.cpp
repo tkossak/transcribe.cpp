@@ -271,6 +271,7 @@ extern "C" size_t transcribe_abi_struct_align(transcribe_abi_struct which) {
     return 0;
 }
 
+
 // Logging
 //
 // Two-atomic log sink. Publication stores userdata (relaxed) then cb

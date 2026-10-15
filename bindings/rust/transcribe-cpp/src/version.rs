@@ -1,10 +1,10 @@
 //! Version + ABI introspection and the load-time version gate.
 //!
 //! Pre-1.0 the on-disk ABI may break between minor releases, so the binding
-//! and the linked library must agree on the base `MAJOR.MINOR.PATCH`. The gate
-//! runs once, lazily, on the first model load (and is exposed directly so a
-//! host can check up front). Packaging-only suffixes on the runtime string are
-//! tolerated — only the leading release segment is compared.
+//! and the linked library must agree on the base `MAJOR.MINOR.PATCH` and the
+//! ASR, VAD and language-ID layouts. The gate runs once, lazily, before the first model
+//! load. Packaging-only suffixes on the runtime string are tolerated — only
+//! the leading release segment is compared.
 
 use std::sync::OnceLock;
 
@@ -59,20 +59,105 @@ fn base(v: &str) -> &str {
 
 static GATE: OnceLock<std::result::Result<(), String>> = OnceLock::new();
 
-/// Run (once) the pre-1.0 base-version lock against the loaded library.
+/// Run (once) the pre-1.0 version and ABI layout gate before model load.
 pub(crate) fn ensure_compatible() -> Result<()> {
     let outcome = GATE.get_or_init(|| {
         let runtime = version();
         let compiled = compiled_version();
-        if base(&runtime) == base(&compiled) {
-            Ok(())
-        } else {
-            Err(format!(
+        if base(&runtime) != base(&compiled) {
+            return Err(format!(
                 "loaded transcribe library is {runtime}, but these bindings \
                  were generated for {compiled} (base versions must match \
                  pre-1.0)"
-            ))
+            ));
         }
+        // Forks can extend the ABI without changing the base version. Check
+        // before any init function can write a mismatched caller-owned struct.
+        for (name, which, size, align) in [
+            (
+                "transcribe_run_params",
+                AbiStruct::RunParams,
+                std::mem::size_of::<sys::transcribe_run_params>(),
+                std::mem::align_of::<sys::transcribe_run_params>(),
+            ),
+            (
+                "transcribe_capabilities",
+                AbiStruct::Capabilities,
+                std::mem::size_of::<sys::transcribe_capabilities>(),
+                std::mem::align_of::<sys::transcribe_capabilities>(),
+            ),
+            (
+                "transcribe_langid_info",
+                AbiStruct::LangIdInfo,
+                std::mem::size_of::<sys::transcribe_langid_info>(),
+                std::mem::align_of::<sys::transcribe_langid_info>(),
+            ),
+            (
+                "transcribe_langid_session_params",
+                AbiStruct::LangIdSessionParams,
+                std::mem::size_of::<sys::transcribe_langid_session_params>(),
+                std::mem::align_of::<sys::transcribe_langid_session_params>(),
+            ),
+            (
+                "transcribe_langid_params",
+                AbiStruct::LangIdParams,
+                std::mem::size_of::<sys::transcribe_langid_params>(),
+                std::mem::align_of::<sys::transcribe_langid_params>(),
+            ),
+            (
+                "transcribe_langid_result",
+                AbiStruct::LangIdResult,
+                std::mem::size_of::<sys::transcribe_langid_result>(),
+                std::mem::align_of::<sys::transcribe_langid_result>(),
+            ),
+            (
+                "transcribe_langid_candidate",
+                AbiStruct::LangIdCandidate,
+                std::mem::size_of::<sys::transcribe_langid_candidate>(),
+                std::mem::align_of::<sys::transcribe_langid_candidate>(),
+            ),
+            (
+                "transcribe_vad_info",
+                AbiStruct::VadInfo,
+                std::mem::size_of::<sys::transcribe_vad_info>(),
+                std::mem::align_of::<sys::transcribe_vad_info>(),
+            ),
+            (
+                "transcribe_vad_session_params",
+                AbiStruct::VadSessionParams,
+                std::mem::size_of::<sys::transcribe_vad_session_params>(),
+                std::mem::align_of::<sys::transcribe_vad_session_params>(),
+            ),
+            (
+                "transcribe_vad_params",
+                AbiStruct::VadParams,
+                std::mem::size_of::<sys::transcribe_vad_params>(),
+                std::mem::align_of::<sys::transcribe_vad_params>(),
+            ),
+            (
+                "transcribe_vad_result",
+                AbiStruct::VadResult,
+                std::mem::size_of::<sys::transcribe_vad_result>(),
+                std::mem::align_of::<sys::transcribe_vad_result>(),
+            ),
+            (
+                "transcribe_vad_segment",
+                AbiStruct::VadSegment,
+                std::mem::size_of::<sys::transcribe_vad_segment>(),
+                std::mem::align_of::<sys::transcribe_vad_segment>(),
+            ),
+        ] {
+            let runtime_size = abi_struct_size(which);
+            let runtime_align = abi_struct_align(which);
+            if runtime_size != size || runtime_align != align {
+                return Err(format!(
+                    "loaded transcribe library {runtime} has {name} size/alignment \
+                     {runtime_size}/{runtime_align}, but these bindings require \
+                     {size}/{align}; use the matching patched native runtime"
+                ));
+            }
+        }
+        Ok(())
     });
     outcome.clone().map_err(Error::VersionMismatch)
 }

@@ -789,9 +789,86 @@ void test_prompting_batch_rejects_prefix() {
     CHECK(g_seen_params.n_vocabulary == 1);
 }
 
+// Candidate requests must fail before replacing any previous run or batch
+// result. The dispatcher owns this policy, independent of model inference.
+void test_language_candidates_fail_closed() {
+    transcribe::Arch arch = run_validate_arch();
+    arch.name = "whisper";
+    transcribe_model model;
+    model.arch = &arch;
+    const char * languages[] = { "en", "pl" };
+    model.caps.languages = languages;
+    model.caps.n_languages = 2;
+    model.caps.supports_language_detect = true;
+    model.caps.supports_language_candidates = true;
+    transcribe_session session;
+    session.model = &model;
+    session.full_text = "previous transcript";
+    session.has_result = true;
+    float audio = 0.0f;
+    const float * pcms[] = { &audio, &audio };
+    const int lengths[] = { 1, 1 };
+    const char * pair[] = { "en", "pl" };
+    transcribe_run_params p;
+    transcribe_run_params_init(&p);
+    p.language_candidates = pair;
+    p.n_language_candidates = 2;
+    auto rejects = [&](transcribe_status expected) {
+        CHECK(transcribe_run(&session, &audio, 1, &p) == expected);
+        CHECK(std::strcmp(transcribe_full_text(&session), "previous transcript") == 0);
+        CHECK(transcribe_run_batch(&session, pcms, lengths, 2, &p) == expected);
+        CHECK(std::strcmp(transcribe_full_text(&session), "previous transcript") == 0);
+    };
+    p.language = "en";
+    rejects(TRANSCRIBE_ERR_INVALID_ARG);
+    p.language = nullptr;
+    p.n_language_candidates = 1;
+    rejects(TRANSCRIBE_ERR_INVALID_ARG);
+    p.n_language_candidates = 3;
+    rejects(TRANSCRIBE_ERR_INVALID_ARG);
+    p.n_language_candidates = -1;
+    rejects(TRANSCRIBE_ERR_INVALID_ARG);
+    p.n_language_candidates = 0;
+    rejects(TRANSCRIBE_ERR_INVALID_ARG);
+    p.n_language_candidates = 2;
+    p.language_candidates = nullptr;
+    rejects(TRANSCRIBE_ERR_INVALID_ARG);
+    p.language_candidates = pair;
+    pair[1] = "en";
+    rejects(TRANSCRIBE_ERR_INVALID_ARG);
+    pair[1] = "";
+    rejects(TRANSCRIBE_ERR_INVALID_ARG);
+    pair[1] = nullptr;
+    rejects(TRANSCRIBE_ERR_INVALID_ARG);
+    pair[1] = "de";
+    rejects(TRANSCRIBE_ERR_UNSUPPORTED_LANGUAGE);
+    pair[1] = "pl";
+    model.caps.supports_language_candidates = false;
+    rejects(TRANSCRIBE_ERR_UNSUPPORTED_LANGUAGE);
+    model.caps.supports_language_candidates = true;
+    model.caps.supports_language_detect = false;
+    rejects(TRANSCRIBE_ERR_UNSUPPORTED_LANGUAGE);
+    model.caps.supports_language_detect = true;
+    arch.name = "parakeet";
+    rejects(TRANSCRIBE_ERR_UNSUPPORTED_LANGUAGE);
+    arch.name = "whisper";
+    model.caps.n_languages = 1;
+    rejects(TRANSCRIBE_ERR_UNSUPPORTED_LANGUAGE);
+    model.caps.n_languages = 2;
+    CHECK(transcribe_run(&session, &audio, 1, &p) == TRANSCRIBE_OK);
+    CHECK(std::strcmp(transcribe_full_text(&session), "fresh result") == 0);
+    CHECK(transcribe_run_batch(&session, pcms, lengths, 2, &p) == TRANSCRIBE_OK);
+    CHECK(transcribe_batch_n_results(&session) == 2);
+    CHECK(transcribe_batch_status(&session, 0) == TRANSCRIBE_OK);
+    CHECK(transcribe_batch_status(&session, 1) == TRANSCRIBE_OK);
+    p.language = "";
+    CHECK(transcribe_run(&session, &audio, 1, &p) == TRANSCRIBE_OK);
+}
+
 }  // namespace
 
 int main() {
+    test_language_candidates_fail_closed();
     test_no_run_hook_clears_and_not_implemented();
     test_batch_serial_truncation_is_per_utterance();
     test_release_scratch_after_run_and_batch();
